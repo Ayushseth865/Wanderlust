@@ -1,0 +1,245 @@
+<% layout("/layouts/boilerplate") %>
+<div class="row mt-3">
+  <div class="col-8 offset-3">
+<h3><%= listing.title %></h3>
+</div>
+<div class="card col-6 offset-3 show-card listing-card" >
+  <img
+   src="<%= listing.image.url %>" 
+  class="card-img-top show-img" 
+  alt="listing_image"
+  />
+    <div class="card-body">
+      <p class="card-text">Owned by<i><%= listing.owner.username %></i></p>
+      <p class="card-text"><%= listing.description %></p>
+      <p class="card-text">&#8377; <%= listing.price.toLocaleString("en-IN") %></p>
+      <p class="card-text"><%= listing.location %></p>
+      <p class="card-text"><%= listing.country %></p>
+      </p>
+    </div>
+</div>
+<br />
+
+
+<div id="reservation-root" class="col-6 offset-3 mb-3" data-listing-id="<%= listing._id %>" data-price="<%= listing.price %>"></div>
+
+
+
+<% if (currUser && listing.owner._id.equals(currUser._id)) { %>
+
+<div class="btns">
+  <a href="/listings/<%= listing._id %>/edit" 
+    class="btn btn-dark col-1 offset-3 edit-btn"
+    >Edit </a>
+
+  <form method="POST" action="/listings/<%= listing._id %>?_method=DELETE">
+  <button class="btn btn-dark  offset-5">Delete </button>
+</form>
+</div>
+
+<!-- Reviews -->
+  <% } %> 
+<div class="col-8 offset-3 mb-3">
+ 
+  <% if(currUser) {%>
+    <hr />
+  <h4>Leave a Review</h4>
+  <form action="/listings/<%= listing.id %>/reviews" 
+    method="POST" 
+    novalidate 
+    class="needs-validation"
+    >
+
+
+  
+  <div class="mb-3 mt-3">
+  <label for="rating" class="form-label">Rating</label>
+  <fieldset class="starability-slot">
+  
+  
+  <input 
+  type="radio" 
+  id="no-rate" 
+  class="input-no-rate" 
+  name="review[rating]"
+  value="1" 
+  checked aria-label="No rating." 
+  />
+  <input type="radio" id="first-rate1" name="review[rating]" value="1" />
+  <label for="first-rate1" title="Terrible">1 star</label>
+  <input type="radio" id="first-rate2" name="review[rating]" value="2" />
+  <label for="first-rate2" title="Not good">2 stars</label>
+  <input type="radio" id="first-rate3" name="review[rating]" value="3" />
+  <label for="first-rate3" title="Average">3 stars</label>
+  <input type="radio" id="first-rate4" name="review[rating]" value="4" />
+  <label for="first-rate4" title="Very good">4 stars</label>
+  <input type="radio" id="first-rate5" name="review[rating]" value="5" />
+  <label for="first-rate5" title="Amazing">5 stars</label>
+</fieldset>
+</div>
+    <div class="mb-3 mt-3">
+      <label for="comment" class="form-label">Comments</label>
+      <textarea 
+      name="review[comment]" 
+      id="comment" 
+      cols="30" 
+      rows="5"
+      class="form-control"
+      required
+      ></textarea>
+      <div class="invalid-feedback">Please add some comments for review</div>
+    </div>
+    <button class="btn btn-outline-dark">Submit</button>
+  </form>
+  <hr />
+  <% } %>
+
+  
+   <% if (listing.reviews.length > 0 ) { %>
+   <div class="row">
+    <p><b>All Reviews</b></p>
+    <% for(review of listing.reviews) { %>
+    <div class="card col-5 ms-3 mb-3">
+      <div class="card-body">
+      <h5 class="card-title"> @<%= review.author.username %></h5>
+       <p class="starability-result card-text" data-rating="<%= review.rating %>"> </p>
+      <p class="card-text"><%= review.comment %></p>
+    <form 
+    class="mb-3" 
+    method="POST" 
+    action="/listings/<%= listing._id %>/reviews/<%= review._id %>?_method=DELETE"
+    >
+      <button class="btn btn-sm btn-dark">Delete</button>
+    </form>
+
+    </div>
+    </div>
+    <% } %>
+   </div>
+   <% } %>
+   </div>
+   <div class="col-6 offset-3 mb-3">
+    <h3>Where you'll be</h3>
+    <div id="map"></div>
+</div>
+</div>
+
+
+<script>
+    const map = new maplibregl.Map({
+        container: 'map', // container id
+        style: 'https://tiles.openfreemap.org/styles/bright', // style URL
+        center: [77.2090, 28.6139], // starting position [lng, lat]
+        zoom: 9 // starting zoom
+        
+    });
+    
+    const marker = new maplibregl.Marker({color:'red'})
+        .setLngLat([77.2090, 28.6139])
+        .addTo(map);
+</script>
+
+
+<script type="text/babel">
+  const { useEffect, useRef, useState } = React;
+
+  function BookingCard({ rootEl }){
+    const listingId = rootEl.dataset.listingId;
+    const pricePerNight = Number(rootEl.dataset.price || 0);
+    const [nights, setNights] = useState(0);
+    const [total, setTotal] = useState(0);
+    const [guests, setGuests] = useState(1);
+    const [cancelNote, setCancelNote] = useState('Free cancellation info will appear after selecting dates');
+    const dateRef = useRef(null);
+    const startRef = useRef(null);
+    const endRef = useRef(null);
+
+    useEffect(() => {
+      if (!dateRef.current) return;
+      const buildDisabledRanges = (ranges) => ranges.map(r => ({ from: new Date(r.start), to: new Date(r.end) }));
+
+      fetch(`/listings/${listingId}/reservations/availability`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(data => {
+          const disabled = buildDisabledRanges(data.ranges || []);
+          flatpickr(dateRef.current, {
+            mode: 'range',
+            minDate: 'today',
+            disable: disabled,
+            dateFormat: 'Y-m-d',
+            onChange: (selectedDates) => {
+              if (selectedDates.length === 2){
+                const [start, end] = selectedDates;
+                startRef.current.value = start.toISOString();
+                endRef.current.value = end.toISOString();
+                const ms = end - start;
+                const n = Math.ceil(ms / (1000*60*60*24));
+                setNights(n);
+                setTotal(n * pricePerNight);
+                const freeCancelUntil = new Date(start.getTime());
+                freeCancelUntil.setDate(freeCancelUntil.getDate() - 5);
+                setCancelNote(`Free cancellation before ${freeCancelUntil.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}`);
+              }
+            }
+          });
+        })
+        .catch(() => {
+          flatpickr(dateRef.current, { mode: 'range', minDate: 'today', dateFormat: 'Y-m-d' });
+        });
+    }, [listingId, pricePerNight]);
+
+    return (
+      <div className="card">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h5 className="card-title mb-0">Select your stay</h5>
+            <span className="badge rounded-pill text-bg-light border">Prices include all fees</span>
+          </div>
+          <form action={`/listings/${listingId}/reservations`} method="POST">
+            <div className="mb-3">
+              <label htmlFor="dateRange" className="form-label">Check-in — Check-out</label>
+              <input ref={dateRef} type="text" id="dateRange" className="form-control" placeholder="Select dates" required />
+              <input ref={startRef} type="hidden" name="startDate" id="startDate" />
+              <input ref={endRef} type="hidden" name="endDate" id="endDate" />
+            </div>
+            <div className="mb-3">
+              <label htmlFor="guests" className="form-label">Guests</label>
+              <select className="form-select" id="guests" name="guests" value={guests} onChange={e => setGuests(Number(e.target.value))}>
+                {Array.from({length:10}, (_,i)=>i+1).map(g => (
+                  <option key={g} value={g}>{g} {g>1? 'guests':'guest'}</option>
+                ))}
+              </select>
+            </div>
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <span>&#8377; {pricePerNight.toLocaleString('en-IN')}</span>
+                <span className="text-muted"> per night</span>
+              </div>
+              <div>
+                <strong>Total: </strong>
+                <span>{nights}</span>
+                <span className="text-muted"> nights</span>
+                <span> · </span>
+                <strong>&#8377; <span>{total.toLocaleString('en-IN')}</span></strong>
+                <span className="text-muted"> · </span>
+                <span className="text-muted">{guests} {guests>1? 'guests':'guest'}</span>
+              </div>
+            </div>
+            <div className="mb-3">
+              <button type="button" className="btn btn-outline-secondary btn-sm" disabled>{cancelNote}</button>
+            </div>
+            <button className="btn btn-dark w-100" type="submit">Reserve</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  (function(){
+    const rootEl = document.getElementById('reservation-root');
+    if (!rootEl) return;
+    const root = ReactDOM.createRoot(rootEl);
+    root.render(<BookingCard rootEl={rootEl} />);
+  })();
+</script>
+
